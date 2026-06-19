@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CQRS Demo — TP Base de Datos</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f0f2f5; color: #1a1a1a; }
+
+    header {
+      background: #1e293b; color: #f8fafc; padding: 14px 24px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+    header span { font-size: 0.8rem; color: #94a3b8; }
+
+    .layout {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px; padding: 20px; max-width: 1200px; margin: 0 auto;
+    }
+
+    .panel { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px #0001; }
+    .panel h2 {
+      font-size: 0.85rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; margin-bottom: 16px; padding-bottom: 8px;
+      border-bottom: 2px solid;
+    }
+    .panel.write h2  { color: #dc2626; border-color: #dc2626; }
+    .panel.read  h2  { color: #2563eb; border-color: #2563eb; }
+
+    .section { margin-bottom: 20px; }
+    .section h3 { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 8px; text-transform: uppercase; }
+
+    label { display: block; font-size: 0.82rem; margin-bottom: 4px; color: #374151; }
+    select, input {
+      width: 100%; padding: 7px 10px; border: 1px solid #d1d5db;
+      border-radius: 5px; font-size: 0.88rem; background: #f9fafb;
+      margin-bottom: 8px;
+    }
+    select:focus, input:focus { outline: 2px solid #3b82f6; border-color: transparent; }
+
+    button {
+      padding: 8px 14px; border: none; border-radius: 5px;
+      cursor: pointer; font-size: 0.85rem; font-weight: 600;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+    button.primary { background: #1e293b; color: #fff; }
+    button.red     { background: #dc2626; color: #fff; }
+    button.blue    { background: #2563eb; color: #fff; }
+
+    .result {
+      margin-top: 10px; padding: 10px; border-radius: 5px;
+      font-size: 0.82rem; font-family: monospace; white-space: pre-wrap;
+      max-height: 200px; overflow-y: auto; display: none;
+    }
+    .result.ok    { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+    .result.error { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+
+    .tag-pedido {
+      display: inline-block; background: #1e293b; color: #fff;
+      padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: 6px;
+    }
+
+    @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>CQRS Demo</h1>
+  <span>TP Base de Datos · Escritura (rojo) | Lectura (azul)</span>
+</header>
+
+<div class="layout">
+
+  <!-- ═══════════════════════════ COMANDOS ═══════════════════════════ -->
+  <div class="panel write">
+    <h2>✏ Comandos — Escritura</h2>
+
+    <!-- Crear pedido -->
+    <div class="section">
+      <h3>1. Crear pedido</h3>
+      <label>Cliente</label>
+      <select id="sel-cliente-cmd"></select>
+      <button class="red" onclick="crearPedido()">Crear pedido</button>
+      <div id="res-crear" class="result"></div>
+    </div>
+
+    <!-- Agregar ítem -->
+    <div class="section">
+      <h3>2. Agregar ítem</h3>
+      <label>ID Pedido</label>
+      <input id="inp-pedido-item" type="number" placeholder="ej. 1" />
+      <label>Producto</label>
+      <select id="sel-producto-cmd"></select>
+      <label>Cantidad</label>
+      <input id="inp-cantidad" type="number" value="1" min="1" />
+      <button class="red" onclick="agregarItem()">Agregar ítem</button>
+      <div id="res-item" class="result"></div>
+    </div>
+
+    <!-- Confirmar pedido -->
+    <div class="section">
+      <h3>3. Confirmar pedido</h3>
+      <label>ID Pedido</label>
+      <input id="inp-pedido-confirmar" type="number" placeholder="ej. 1" />
+      <button class="red" onclick="confirmarPedido()">Confirmar</button>
+      <div id="res-confirmar" class="result"></div>
+    </div>
+
+    <!-- Cambiar estado -->
+    <div class="section">
+      <h3>4. Cambiar estado</h3>
+      <label>ID Pedido</label>
+      <input id="inp-pedido-estado" type="number" placeholder="ej. 1" />
+      <label>Nuevo estado</label>
+      <select id="sel-nuevo-estado">
+        <option>Enviado</option>
+        <option>Entregado</option>
+        <option>Cancelado</option>
+      </select>
+      <button class="red" onclick="cambiarEstado()">Actualizar estado</button>
+      <div id="res-estado" class="result"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ CONSULTAS ═══════════════════════════ -->
+  <div class="panel read">
+    <h2>🔍 Consultas — Lectura</h2>
+
+    <!-- Resumen de pedido -->
+    <div class="section">
+      <h3>Ver resumen de pedido</h3>
+      <label>ID Pedido</label>
+      <input id="inp-pedido-resumen" type="number" placeholder="ej. 1" />
+      <button class="blue" onclick="verResumen()">Ver resumen</button>
+      <div id="res-resumen" class="result"></div>
+    </div>
+
+    <!-- Estado de envío -->
+    <div class="section">
+      <h3>Estado de envío</h3>
+      <label>ID Pedido</label>
+      <input id="inp-pedido-envio" type="number" placeholder="ej. 1" />
+      <button class="blue" onclick="verEstado()">Ver estado</button>
+      <div id="res-envio" class="result"></div>
+    </div>
+
+    <!-- Pedidos por cliente -->
+    <div class="section">
+      <h3>Pedidos de un cliente</h3>
+      <label>Cliente</label>
+      <select id="sel-cliente-query"></select>
+      <button class="blue" onclick="verPedidosCliente()">Listar pedidos</button>
+      <div id="res-pedidos-cliente" class="result"></div>
+    </div>
+
+    <!-- Top productos -->
+    <div class="section">
+      <h3>Top productos</h3>
+      <label>Desde</label>
+      <input id="inp-desde" type="date" />
+      <label>Hasta</label>
+      <input id="inp-hasta" type="date" />
+      <button class="blue" onclick="verTopProductos()">Ver ranking</button>
+      <div id="res-top" class="result"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = "";
+
+function show(id, data, isError) {
+  const el = document.getElementById(id);
+  el.style.display = "block";
+  el.className = "result " + (isError ? "error" : "ok");
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: { "Content-Type": "application/json" } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  const json = await r.json();
+  if (!r.ok) throw new Error(json.detail || JSON.stringify(json));
+  return json;
+}
+
+// ── Cargar selects al inicio ─────────────────────────────────────────────────
+async function cargarSelects() {
+  const [clientes, productos] = await Promise.all([
+    fetch("/clientes").then(r => r.json()),
+    fetch("/productos").then(r => r.json()),
+  ]);
+
+  const selClientes = [document.getElementById("sel-cliente-cmd"), document.getElementById("sel-cliente-query")];
+  selClientes.forEach(sel => {
+    sel.innerHTML = clientes.map(c =>
+      `<option value="${c.ID_Cliente}">${c.Nombre} (id ${c.ID_Cliente})</option>`
+    ).join("");
+  });
+
+  document.getElementById("sel-producto-cmd").innerHTML = productos.map(p =>
+    `<option value="${p.ID_Producto}">${p.Nombre} — $${p.Precio} | stock: ${p.Stock}</option>`
+  ).join("");
+
+  // Fechas por defecto: último mes
+  const hoy = new Date();
+  const mesAtras = new Date(); mesAtras.setMonth(hoy.getMonth() - 1);
+  document.getElementById("inp-hasta").value = hoy.toISOString().slice(0,10);
+  document.getElementById("inp-desde").value = mesAtras.toISOString().slice(0,10);
+}
+
+// ── COMANDOS ─────────────────────────────────────────────────────────────────
+
+async function crearPedido() {
+  const id_cliente = +document.getElementById("sel-cliente-cmd").value;
+  try {
+    const r = await api("POST", "/pedidos", { id_cliente });
+    show("res-crear", `Pedido creado. ID: ${r.id_pedido}`, false);
+    // autorellenar campos con el nuevo id
+    ["inp-pedido-item","inp-pedido-confirmar","inp-pedido-estado","inp-pedido-resumen","inp-pedido-envio"].forEach(id => {
+      document.getElementById(id).value = r.id_pedido;
+    });
+  } catch(e) { show("res-crear", e.message, true); }
+}
+
+async function agregarItem() {
+  const id_pedido  = +document.getElementById("inp-pedido-item").value;
+  const id_producto = +document.getElementById("sel-producto-cmd").value;
+  const cantidad   = +document.getElementById("inp-cantidad").value;
+  try {
+    await api("POST", `/pedidos/${id_pedido}/items`, { id_producto, cantidad });
+    show("res-item", "Ítem agregado correctamente.", false);
+    await cargarSelects(); // refrescar stock visible
+  } catch(e) { show("res-item", e.message, true); }
+}
+
+async function confirmarPedido() {
+  const id = +document.getElementById("inp-pedido-confirmar").value;
+  try {
+    await api("POST", `/pedidos/${id}/confirmar`);
+    show("res-confirmar", `Pedido ${id} confirmado. Stock descontado.`, false);
+    await cargarSelects();
+  } catch(e) { show("res-confirmar", e.message, true); }
+}
+
+async function cambiarEstado() {
+  const id = +document.getElementById("inp-pedido-estado").value;
+  const nuevo_estado = document.getElementById("sel-nuevo-estado").value;
+  try {
+    await api("POST", `/pedidos/${id}/estado`, { nuevo_estado });
+    show("res-estado", `Estado actualizado a "${nuevo_estado}".`, false);
+  } catch(e) { show("res-estado", e.message, true); }
+}
+
+// ── CONSULTAS ─────────────────────────────────────────────────────────────────
+
+async function verResumen() {
+  const id = +document.getElementById("inp-pedido-resumen").value;
+  try {
+    const r = await api("GET", `/pedidos/${id}`);
+    show("res-resumen", r, false);
+  } catch(e) { show("res-resumen", e.message, true); }
+}
+
+async function verEstado() {
+  const id = +document.getElementById("inp-pedido-envio").value;
+  try {
+    const r = await api("GET", `/pedidos/${id}/estado`);
+    show("res-envio", `Estado: ${r.estado}`, false);
+  } catch(e) { show("res-envio", e.message, true); }
+}
+
+async function verPedidosCliente() {
+  const id = +document.getElementById("sel-cliente-query").value;
+  try {
+    const r = await api("GET", `/clientes/${id}/pedidos`);
+    show("res-pedidos-cliente", r.length ? r : "(sin pedidos)", false);
+  } catch(e) { show("res-pedidos-cliente", e.message, true); }
+}
+
+async function verTopProductos() {
+  const desde = document.getElementById("inp-desde").value;
+  const hasta = document.getElementById("inp-hasta").value;
+  try {
+    const r = await api("GET", `/reportes/top-productos?desde=${desde}&hasta=${hasta}`);
+    show("res-top", r.length ? r : "(sin datos en ese rango)", false);
+  } catch(e) { show("res-top", e.message, true); }
+}
+
+cargarSelects();
+</script>
+</body>
+</html>

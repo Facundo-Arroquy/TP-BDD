@@ -200,12 +200,12 @@ async function cargarSelects() {
   const selClientes = [document.getElementById("sel-cliente-cmd"), document.getElementById("sel-cliente-query")];
   selClientes.forEach(sel => {
     sel.innerHTML = clientes.map(c =>
-      `<option value="${c.ID_Cliente}">${c.Nombre} (id ${c.ID_Cliente})</option>`
+      `<option value="${c.id_cliente}">${c.nombre} (id ${c.id_cliente})</option>`
     ).join("");
   });
 
   document.getElementById("sel-producto-cmd").innerHTML = productos.map(p =>
-    `<option value="${p.ID_Producto}">${p.Nombre} — $${p.Precio} | stock: ${p.Stock}</option>`
+    `<option value="${p.id_producto}">${p.nombre} — $${p.precio} | stock: ${p.stock}</option>`
   ).join("");
 
   // Fechas por defecto: último mes

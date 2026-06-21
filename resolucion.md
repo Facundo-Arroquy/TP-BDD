@@ -5,6 +5,8 @@ Este archivo resuelve las **Partes 1, 2 y 3** del enunciado (diseño de modelos,
 La Parte 4 (benchmarks CQRS vs CRUD y conclusiones) queda pendiente porque requiere medir sobre un dataset propio; al final se deja la guía para encararla.
 
 > Cómo correr todo: ejecutar los bloques en orden (1 → 8). Cada bloque también está pensado para vivir en su propio archivo dentro de `sql/` (ver `task.md`).
+>
+> **Mejoras posteriores:** este TP fue extendido con reposición de stock al cancelar, historial de estados vía trigger, modelo de lectura para top productos (`ResumenVentas`), sincronización asíncrona con cola de eventos, dashboard de métricas, vista de auditoría y diagrama de arquitectura. Ver `revision.md` y `README.md`.
 
 ---
 
@@ -440,11 +442,15 @@ Qué observar en cada plan:
 Tabla para completar con tus mediciones (columna *Execution Time* del `EXPLAIN ANALYZE`):
 
 | Consulta | Enfoque | Execution time (ms) | Buffers (hit/read) | Nodos del plan |
-|---|---|---|---|---|
-| Pedidos por cliente | CQRS  | _completar_ | _completar_ | Index Scan |
-| Pedidos por cliente | CRUD  | _completar_ | _completar_ | Index Scan + 3 Joins + Aggregate |
-| Resumen de un pedido | CQRS  | _completar_ | _completar_ | Index Scan (PK) |
-| Resumen de un pedido | CRUD  | _completar_ | _completar_ | Joins + Aggregate |
+|---|---|---|---|---|---|
+| Pedidos por cliente | CQRS  | _completar_ | _completar_ | Index Scan (idx_resumen_cliente) |
+| Pedidos por cliente | CRUD  | _completar_ | _completar_ | Index Scan (Pedido) + 2 Hash Join + GroupAggregate |
+| Resumen de un pedido | CQRS  | _completar_ | _completar_ | Index Scan (PK PedidoResumen) |
+| Resumen de un pedido | CRUD  | _completar_ | _completar_ | Index Scan (PK Pedido) + 2 Hash Join + GroupAggregate |
+| Estado de envío | CQRS  | _completar_ | _completar_ | Index Scan (PK PedidoResumen) |
+| Estado de envío | CRUD  | _completar_ | _completar_ | Index Scan (PK Pedido) + 2 Hash Join + GroupAggregate |
+| Top productos | CQRS  | _completar_ | _completar_ | Index Scan (idx_item_producto) + Hash Join + GroupAggregate |
+| Top productos | CRUD  | _completar_ | _completar_ | Index Scan (idx_item_producto) + Hash Join + GroupAggregate |
 
 > Resultado esperado: la lectura CQRS es **varias veces más rápida** y estable porque traslada el trabajo de unir/agregar al momento de la escritura (una vez) en lugar de repetirlo en cada lectura (muchas veces).
 

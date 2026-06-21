@@ -100,9 +100,41 @@ def estado_envio(id_pedido: int):
 
 
 @app.get("/reportes/top-productos")
-def top_productos(desde: str, hasta: str, limite: int = 10):
+def top_productos(desde: str = None, hasta: str = None, limite: int = 10):
     rows = call(
         "SELECT * FROM lectura.obtener_top_productos(%s::timestamp, %s::timestamp, %s)",
         (desde, hasta, limite),
     )
     return rows
+
+
+# ── NUEVAS CONSULTAS ──────────────────────────────────────────────────────────
+
+@app.get("/pedidos/{id_pedido}/historial")
+def historial_estado(id_pedido: int):
+    rows = call("SELECT * FROM lectura.obtener_historial_estado(%s)", (id_pedido,))
+    return rows
+
+
+@app.get("/auditoria")
+def listar_auditoria(limite: int = 20):
+    rows = call(
+        "SELECT ID, Comando, Payload, Usuario, Fecha FROM escritura.AuditoriaComando ORDER BY ID DESC LIMIT %s",
+        (limite,),
+    )
+    return rows
+
+
+@app.get("/dashboard/metricas")
+def dashboard_metricas():
+    rows = call("""
+        SELECT
+            (SELECT COUNT(*) FROM escritura.Pedido) AS total_pedidos,
+            (SELECT COUNT(*) FROM escritura.Cliente) AS total_clientes,
+            (SELECT COUNT(*) FROM escritura.Producto) AS total_productos,
+            (SELECT jsonb_object_agg(Estado, cnt) FROM
+                (SELECT Estado, COUNT(*) AS cnt FROM escritura.Pedido GROUP BY Estado) t
+            ) AS pedidos_por_estado,
+            (SELECT COALESCE(SUM(Unidades_Vendidas), 0) FROM lectura.ResumenVentas) AS total_unidades_vendidas
+    """)
+    return rows[0] if rows else {}

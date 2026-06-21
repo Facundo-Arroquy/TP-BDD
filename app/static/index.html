@@ -19,6 +19,7 @@
       display: grid; grid-template-columns: 1fr 1fr;
       gap: 16px; padding: 20px; max-width: 1200px; margin: 0 auto;
     }
+    .layout-full { padding: 0 20px 20px; max-width: 1200px; margin: 0 auto; }
 
     .panel { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px #0001; }
     .panel h2 {
@@ -28,6 +29,9 @@
     }
     .panel.write h2  { color: #dc2626; border-color: #dc2626; }
     .panel.read  h2  { color: #2563eb; border-color: #2563eb; }
+    .panel.metrics h2 { color: #16a34a; border-color: #16a34a; }
+    .panel.arch   h2 { color: #9333ea; border-color: #9333ea; }
+    .panel.audit  h2 { color: #d97706; border-color: #d97706; }
 
     .section { margin-bottom: 20px; }
     .section h3 { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 8px; text-transform: uppercase; }
@@ -49,6 +53,9 @@
     button.primary { background: #1e293b; color: #fff; }
     button.red     { background: #dc2626; color: #fff; }
     button.blue    { background: #2563eb; color: #fff; }
+    button.green   { background: #16a34a; color: #fff; }
+    button.purple  { background: #9333ea; color: #fff; }
+    button.orange  { background: #d97706; color: #fff; }
 
     .result {
       margin-top: 10px; padding: 10px; border-radius: 5px;
@@ -63,6 +70,21 @@
       padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: 6px;
     }
 
+    .metricas {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .metric-card {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 8px; padding: 14px; text-align: center;
+    }
+    .metric-card .num { font-size: 1.6rem; font-weight: 700; color: #1e293b; }
+    .metric-card .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; margin-top: 4px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; font-weight: 600; color: #475569; }
+
     @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -70,16 +92,29 @@
 
 <header>
   <h1>CQRS Demo</h1>
-  <span>TP Base de Datos · Escritura (rojo) | Lectura (azul)</span>
+  <span>TP Base de Datos · Escritura (rojo) | Lectura (azul) | Métricas (verde)</span>
 </header>
+
+<!-- ═══════════════ DASHBOARD ═══════════════ -->
+<div class="layout-full">
+  <div class="panel metrics">
+    <h2>Dashboard — Métricas</h2>
+    <div class="metricas" id="metricas">
+      <div class="metric-card"><div class="num">-</div><div class="label">Pedidos</div></div>
+      <div class="metric-card"><div class="num">-</div><div class="label">Clientes</div></div>
+      <div class="metric-card"><div class="num">-</div><div class="label">Productos</div></div>
+      <div class="metric-card"><div class="num">-</div><div class="label">Unids. vendidas</div></div>
+    </div>
+    <button class="green" onclick="cargarDashboard()">Refrescar dashboard</button>
+  </div>
+</div>
 
 <div class="layout">
 
   <!-- ═══════════════════════════ COMANDOS ═══════════════════════════ -->
   <div class="panel write">
-    <h2>✏ Comandos — Escritura</h2>
+    <h2>Comandos — Escritura</h2>
 
-    <!-- Crear pedido -->
     <div class="section">
       <h3>1. Crear pedido</h3>
       <label>Cliente</label>
@@ -88,7 +123,6 @@
       <div id="res-crear" class="result"></div>
     </div>
 
-    <!-- Agregar ítem -->
     <div class="section">
       <h3>2. Agregar ítem</h3>
       <label>ID Pedido</label>
@@ -101,7 +135,6 @@
       <div id="res-item" class="result"></div>
     </div>
 
-    <!-- Confirmar pedido -->
     <div class="section">
       <h3>3. Confirmar pedido</h3>
       <label>ID Pedido</label>
@@ -110,7 +143,6 @@
       <div id="res-confirmar" class="result"></div>
     </div>
 
-    <!-- Cambiar estado -->
     <div class="section">
       <h3>4. Cambiar estado</h3>
       <label>ID Pedido</label>
@@ -128,9 +160,8 @@
 
   <!-- ═══════════════════════════ CONSULTAS ═══════════════════════════ -->
   <div class="panel read">
-    <h2>🔍 Consultas — Lectura</h2>
+    <h2>Consultas — Lectura</h2>
 
-    <!-- Resumen de pedido -->
     <div class="section">
       <h3>Ver resumen de pedido</h3>
       <label>ID Pedido</label>
@@ -139,7 +170,6 @@
       <div id="res-resumen" class="result"></div>
     </div>
 
-    <!-- Estado de envío -->
     <div class="section">
       <h3>Estado de envío</h3>
       <label>ID Pedido</label>
@@ -148,7 +178,14 @@
       <div id="res-envio" class="result"></div>
     </div>
 
-    <!-- Pedidos por cliente -->
+    <div class="section">
+      <h3>Historial de cambios de estado</h3>
+      <label>ID Pedido</label>
+      <input id="inp-pedido-historial" type="number" placeholder="ej. 1" />
+      <button class="blue" onclick="verHistorial()">Ver historial</button>
+      <div id="res-historial" class="result"></div>
+    </div>
+
     <div class="section">
       <h3>Pedidos de un cliente</h3>
       <label>Cliente</label>
@@ -157,7 +194,6 @@
       <div id="res-pedidos-cliente" class="result"></div>
     </div>
 
-    <!-- Top productos -->
     <div class="section">
       <h3>Top productos</h3>
       <label>Desde</label>
@@ -169,6 +205,43 @@
     </div>
   </div>
 
+</div>
+
+<div class="layout-full">
+  <!-- ═══════════════ AUDITORÍA ═══════════════ -->
+  <div class="panel audit" style="margin-bottom: 16px;">
+    <h2>Auditoría — Comandos ejecutados</h2>
+    <button class="orange" onclick="cargarAuditoria()">Refrescar</button>
+    <div id="res-auditoria" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- ═══════════════ ARQUITECTURA ═══════════════ -->
+  <div class="panel arch">
+    <h2>Arquitectura CQRS</h2>
+    <pre style="font-size: 0.75rem; line-height: 1.3; overflow-x: auto;">
+Cliente (Browser)        FastAPI (main.py)              PostgreSQL
+     │                        │                            │
+     │── POST /pedidos ──────►│── escritura.create_pedido ─►│── INSERT Pedido ──┐
+     │                        │                            │── sync_resumen ──┤
+     │                        │                            │── INSERT Auditoría │
+     │◄─── {id_pedido} ──────│◄─────────────────────────────┘                   │
+     │                        │                                                  │
+     │── GET /pedidos/{id} ──►│── lectura.obtener_resumen ──►│── SELECT PedidoResumen
+     │◄─── datos desnormalizados ──│◄─────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────┐
+    │  Schema escritura (normalizado)   Schema lectura (desnorm.) │
+    │  ┌─────────┐  ┌──────────┐        ┌──────────────┐         │
+    │  │ Cliente │  │ Producto │        │PedidoResumen │         │
+    │  ├─────────┤  ├──────────┤        │- Nombre_Cte  │         │
+    │  │ Pedido  │  │ItemPedido│        │- Productos   │         │
+    │  └─────────┘  └──────────┘        │- Cant_Items  │         │
+    │  │ Auditoría │                    └──────────────┘         │
+    │  │ EstadoHist│                    │ ResumenVentas │         │
+    │  │ ColaSync  │                    └──────────────┘         │
+    └──────────────────────────────────────────────────────────────┘
+    </pre>
+  </div>
 </div>
 
 <script>
@@ -208,11 +281,37 @@ async function cargarSelects() {
     `<option value="${p.id_producto}">${p.nombre} — $${p.precio} | stock: ${p.stock}</option>`
   ).join("");
 
-  // Fechas por defecto: último mes
   const hoy = new Date();
   const mesAtras = new Date(); mesAtras.setMonth(hoy.getMonth() - 1);
   document.getElementById("inp-hasta").value = hoy.toISOString().slice(0,10);
   document.getElementById("inp-desde").value = mesAtras.toISOString().slice(0,10);
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function cargarDashboard() {
+  try {
+    const m = await api("GET", "/dashboard/metricas");
+    const cards = document.querySelectorAll(".metric-card");
+    cards[0].querySelector(".num").textContent = m.total_pedidos ?? "-";
+    cards[1].querySelector(".num").textContent = m.total_clientes ?? "-";
+    cards[2].querySelector(".num").textContent = m.total_productos ?? "-";
+    cards[3].querySelector(".num").textContent = m.total_unidades_vendidas ?? "-";
+  } catch(e) { console.error("Dashboard error:", e); }
+}
+
+// ── Auditoría ─────────────────────────────────────────────────────────────────
+async function cargarAuditoria() {
+  try {
+    const rows = await api("GET", "/auditoria?limite=15");
+    const el = document.getElementById("res-auditoria");
+    if (!rows.length) { el.innerHTML = "(sin datos)"; return; }
+    let html = "<table><tr><th>ID</th><th>Comando</th><th>Payload</th><th>Fecha</th></tr>";
+    rows.forEach(r => {
+      html += `<tr><td>${r.id}</td><td>${r.comando}</td><td>${JSON.stringify(r.payload)}</td><td>${r.fecha}</td></tr>`;
+    });
+    html += "</table>";
+    el.innerHTML = html;
+  } catch(e) { console.error("Auditoria error:", e); }
 }
 
 // ── COMANDOS ─────────────────────────────────────────────────────────────────
@@ -222,10 +321,10 @@ async function crearPedido() {
   try {
     const r = await api("POST", "/pedidos", { id_cliente });
     show("res-crear", `Pedido creado. ID: ${r.id_pedido}`, false);
-    // autorellenar campos con el nuevo id
-    ["inp-pedido-item","inp-pedido-confirmar","inp-pedido-estado","inp-pedido-resumen","inp-pedido-envio"].forEach(id => {
+    ["inp-pedido-item","inp-pedido-confirmar","inp-pedido-estado","inp-pedido-resumen","inp-pedido-envio","inp-pedido-historial"].forEach(id => {
       document.getElementById(id).value = r.id_pedido;
     });
+    await Promise.all([cargarDashboard(), cargarAuditoria()]);
   } catch(e) { show("res-crear", e.message, true); }
 }
 
@@ -236,7 +335,7 @@ async function agregarItem() {
   try {
     await api("POST", `/pedidos/${id_pedido}/items`, { id_producto, cantidad });
     show("res-item", "Ítem agregado correctamente.", false);
-    await cargarSelects(); // refrescar stock visible
+    await Promise.all([cargarSelects(), cargarDashboard(), cargarAuditoria()]);
   } catch(e) { show("res-item", e.message, true); }
 }
 
@@ -245,7 +344,7 @@ async function confirmarPedido() {
   try {
     await api("POST", `/pedidos/${id}/confirmar`);
     show("res-confirmar", `Pedido ${id} confirmado. Stock descontado.`, false);
-    await cargarSelects();
+    await Promise.all([cargarSelects(), cargarDashboard(), cargarAuditoria()]);
   } catch(e) { show("res-confirmar", e.message, true); }
 }
 
@@ -255,6 +354,7 @@ async function cambiarEstado() {
   try {
     await api("POST", `/pedidos/${id}/estado`, { nuevo_estado });
     show("res-estado", `Estado actualizado a "${nuevo_estado}".`, false);
+    await Promise.all([cargarDashboard(), cargarAuditoria()]);
   } catch(e) { show("res-estado", e.message, true); }
 }
 
@@ -276,6 +376,14 @@ async function verEstado() {
   } catch(e) { show("res-envio", e.message, true); }
 }
 
+async function verHistorial() {
+  const id = +document.getElementById("inp-pedido-historial").value;
+  try {
+    const r = await api("GET", `/pedidos/${id}/historial`);
+    show("res-historial", r.length ? r : "(sin historial)", false);
+  } catch(e) { show("res-historial", e.message, true); }
+}
+
 async function verPedidosCliente() {
   const id = +document.getElementById("sel-cliente-query").value;
   try {
@@ -293,7 +401,10 @@ async function verTopProductos() {
   } catch(e) { show("res-top", e.message, true); }
 }
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 cargarSelects();
+cargarDashboard();
+cargarAuditoria();
 </script>
 </body>
 </html>

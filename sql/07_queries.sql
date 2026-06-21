@@ -21,16 +21,5 @@ RETURNS VARCHAR AS $$
     SELECT Estado FROM lectura.PedidoResumen WHERE ID_Pedido = p_id_pedido;
 $$ LANGUAGE sql;
 
--- ObtenerTopProductos: productos más vendidos en un período
-CREATE OR REPLACE FUNCTION lectura.obtener_top_productos(p_desde TIMESTAMP, p_hasta TIMESTAMP, p_limite INT DEFAULT 10)
-RETURNS TABLE (ID_Producto INT, Nombre VARCHAR, Unidades BIGINT) AS $$
-    SELECT pr.ID_Producto, pr.Nombre, SUM(i.Cantidad) AS unidades
-    FROM escritura.ItemPedido i
-    JOIN escritura.Pedido p   ON p.ID_Pedido = i.ID_Pedido
-    JOIN escritura.Producto pr ON pr.ID_Producto = i.ID_Producto
-    WHERE p.Fecha_Creacion BETWEEN p_desde AND p_hasta
-      AND p.Estado IN ('Confirmado','Enviado','Entregado')
-    GROUP BY pr.ID_Producto, pr.Nombre
-    ORDER BY unidades DESC
-    LIMIT p_limite;
-$$ LANGUAGE sql;
+-- Nota: ObtenerTopProductos se movió a 13_resumen_ventas.sql
+-- para mantener la separación CQRS (lectura sobre modelo desnormalizado).

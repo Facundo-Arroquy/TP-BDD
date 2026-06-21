@@ -98,7 +98,7 @@ $$ LANGUAGE plpgsql;
 -- ActualizarEstadoCommand: valida la transición de estado
 CREATE OR REPLACE FUNCTION escritura.actualizar_estado(p_id_pedido INT, p_nuevo_estado VARCHAR)
 RETURNS VOID AS $$
-DECLARE v_estado VARCHAR(20);
+DECLARE v_estado VARCHAR(20); r RECORD;
 BEGIN
     SELECT Estado INTO v_estado FROM escritura.Pedido WHERE ID_Pedido = p_id_pedido;
     IF v_estado IS NULL THEN
@@ -112,6 +112,14 @@ BEGIN
         (v_estado IN ('Pendiente','Confirmado') AND p_nuevo_estado = 'Cancelado')
     ) THEN
         RAISE EXCEPTION 'Transición inválida: % -> %', v_estado, p_nuevo_estado;
+    END IF;
+
+    -- reposición de stock al cancelar un pedido que ya había descontado stock
+    IF p_nuevo_estado = 'Cancelado' AND v_estado IN ('Confirmado', 'Enviado') THEN
+        UPDATE escritura.Producto pr SET Stock = Stock + sub.cant
+        FROM (SELECT ID_Producto, SUM(Cantidad) AS cant
+              FROM escritura.ItemPedido WHERE ID_Pedido = p_id_pedido GROUP BY ID_Producto) sub
+        WHERE pr.ID_Producto = sub.ID_Producto;
     END IF;
 
     UPDATE escritura.Pedido SET Estado = p_nuevo_estado WHERE ID_Pedido = p_id_pedido;

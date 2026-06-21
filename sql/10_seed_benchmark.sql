@@ -1,6 +1,8 @@
 -- Dataset grande para benchmark (generate_series)
 -- TP Base de Datos - CQRS. Generado desde resolucion.md
 
+SELECT setseed(0.5);  -- semilla fija para datos reproducibles
+
 -- 1.000 clientes
 INSERT INTO escritura.Cliente (Nombre, Email)
 SELECT 'Cliente ' || g, 'cliente' || g || '@mail.com'

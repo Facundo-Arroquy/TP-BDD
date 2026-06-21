@@ -1,6 +1,9 @@
 -- Esquema CRUD de referencia (lectura con JOINs)
 -- TP Base de Datos - CQRS. Generado desde resolucion.md
 
+-- Índice necesario para que la comparación CRUD sea justa
+CREATE INDEX IF NOT EXISTS idx_pedido_cliente ON escritura.Pedido (ID_Cliente);
+
 -- CRUD: pedidos por cliente resueltos con JOINs + agregación en cada lectura
 CREATE OR REPLACE FUNCTION escritura.crud_pedidos_por_cliente(p_id_cliente INT)
 RETURNS TABLE (ID_Pedido INT, Nombre_Cliente VARCHAR, Estado VARCHAR,

@@ -5,7 +5,7 @@ App web mínima que demuestra el patrón CQRS invocando las funciones PostgreSQL
 ## Requisitos
 
 - Python 3.11+
-- PostgreSQL con los scripts `sql/00..07` ya ejecutados
+- PostgreSQL con los scripts `sql/00..14` ya ejecutados
 
 ## Paso 1 — Cargar los scripts SQL (una sola vez)
 
@@ -20,11 +20,14 @@ psql -U <usuario> -d <nombre_db> -f sql/04_sync.sql
 psql -U <usuario> -d <nombre_db> -f sql/05_commands.sql
 psql -U <usuario> -d <nombre_db> -f sql/06_indexes.sql
 psql -U <usuario> -d <nombre_db> -f sql/07_queries.sql
+psql -U <usuario> -d <nombre_db> -f sql/12_estado_historico.sql
+psql -U <usuario> -d <nombre_db> -f sql/13_resumen_ventas.sql
 ```
 
-Opcionalmente, cargar datos de prueba:
+Opcionalmente, cargar sync asíncrona y datos de prueba:
 
 ```bash
+psql -U <usuario> -d <nombre_db> -f sql/14_async_sync.sql
 psql -U <usuario> -d <nombre_db> -f sql/08_smoke_test.sql
 ```
 
@@ -73,3 +76,13 @@ Browser → FastAPI (main.py) → psycopg → PostgreSQL
 ```
 
 La app no contiene lógica de negocio; toda la validación vive en las funciones SQL.
+
+## Mejoras implementadas
+
+- **Reposición de stock**: al cancelar un pedido Confirmado/Enviado, el stock se devuelve automáticamente.
+- **Historial de estados**: cada cambio de estado queda registrado con timestamp, consultable desde la UI.
+- **Dashboard**: métricas agregadas (total pedidos, clientes, productos, unidades vendidas).
+- **Auditoría visible**: tabla en la UI con los últimos comandos ejecutados.
+- **Diagrama de arquitectura**: sección informativa embebida en la UI.
+- **Sincronización asíncrona**: disponible vía `14_async_sync.sql` (cola de eventos + LISTEN/NOTIFY).
+- **Top productos sobre modelo de lectura**: `ResumenVentas` evita JOINs en tiempo real.

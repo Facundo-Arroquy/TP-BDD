@@ -28,6 +28,10 @@ En Windows PowerShell:
 .\scripts\run_all.ps1 -Mode docker
 ```
 
+`run_all.sh` hace todo en una sola corrida: levanta Postgres, carga el esquema y las funciones, corre el **smoke test (`08`)**, carga el dataset grande y mide el benchmark CQRS vs CRUD (con una pasada de *warm-up* de cache para que los tiempos sean estables), imprimiendo el resumen de tiempos al final.
+
+> El smoke test inserta unos pocos datos de demo **legibles** (clientes Ana/Luis, productos Teclado/Mouse/Monitor y un pedido de ejemplo), pensados para **probar el flujo desde el frontend** —a diferencia de los `Cliente 1` / `Producto 1` que genera el seed. Son ~5 filas y **no afectan las mediciones**: las consultas del benchmark apuntan a otros IDs (cliente 42, pedido 25000).
+
 ### Manual
 
 Con Docker:
@@ -36,14 +40,25 @@ Con Docker:
 docker run --name tp-cqrs -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
 ```
 
-Ejecutar los scripts en orden:
+Ejecutar los scripts **en orden de dependencias** (no por nombre): `10_seed_benchmark.sql`
+llama a `lectura.sync_ventas()`, que se define en `13_resumen_ventas.sql`, así que el seed
+tiene que correr *después* del 13. Por eso usamos una lista explícita y no un glob
+(`sql/1*.sql` correría 10 antes que 12/13/14 y fallaría):
 
 ```bash
-for f in sql/0*.sql sql/1*.sql; do
+for f in 00_setup 01_write_model 02_read_model 03_audit 04_sync \
+         05_commands 06_indexes 07_queries 09_crud_reference \
+         12_estado_historico 13_resumen_ventas 14_async_sync \
+         10_seed_benchmark; do
   echo ">>> $f"
-  psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
+  psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "sql/$f.sql"
 done
+
+# Benchmark CQRS vs CRUD (se corre aparte para leer los tiempos):
+psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f sql/11_benchmark.sql
 ```
+
+> Esto es exactamente lo que automatiza `./scripts/run_all.sh` (la vía recomendada).
 
 Orden y propósito:
 
@@ -60,12 +75,12 @@ Orden y propósito:
 | `08_smoke_test.sql` | Prueba rápida del flujo completo |
 | `09_crud_reference.sql` | Consulta CRUD de referencia (con JOINs) para comparar |
 | `10_seed_benchmark.sql` | Carga un dataset grande con `generate_series` (con semilla fija) |
-| `11_benchmark.sql` | `EXPLAIN ANALYZE`: CQRS vs CRUD |
+| `11_benchmark.sql` | `EXPLAIN` + `\timing`: CQRS vs CRUD |
 | `12_estado_historico.sql` | Historial de cambios de estado con trigger automático |
 | `13_resumen_ventas.sql` | Modelo de lectura para top productos (desnormalizado) |
 | `14_async_sync.sql` | Sincronización asíncrona con cola de eventos y LISTEN/NOTIFY |
 
-> `08_smoke_test.sql` inserta datos de ejemplo. Si después vas a correr el benchmark, podés saltearlo o resetear con `00`–`07` para no mezclar datasets.
+> `08_smoke_test.sql` no está en esta lista manual a propósito, para dejar el dataset 100 % del seed. `run_all.sh` en cambio **sí lo corre** (datos de demo legibles para el frontend, ver más arriba); son pocas filas y no afectan las mediciones. Para correrlo a mano sobre una base limpia: `psql ... -f sql/08_smoke_test.sql`.
 
 ## Decisiones de diseño
 

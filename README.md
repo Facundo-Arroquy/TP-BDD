@@ -79,8 +79,25 @@ Orden y propósito:
 | `12_estado_historico.sql` | Historial de cambios de estado con trigger automático |
 | `13_resumen_ventas.sql` | Modelo de lectura para top productos (desnormalizado) |
 | `14_async_sync.sql` | Sincronización asíncrona con cola de eventos y LISTEN/NOTIFY |
+| `15_pruebas_negativas.sql` | Prueba que los comandos rechazan operaciones inválidas (validaciones) |
+| `16_demo_consistencia_eventual.sql` | Demo síncrono vs asíncrono (ventana de inconsistencia) |
 
 > `08_smoke_test.sql` no está en esta lista manual a propósito, para dejar el dataset 100 % del seed. `run_all.sh` en cambio **sí lo corre** (datos de demo legibles para el frontend, ver más arriba); son pocas filas y no afectan las mediciones. Para correrlo a mano sobre una base limpia: `psql ... -f sql/08_smoke_test.sql`.
+
+## Pruebas y demos
+
+Scripts independientes que corren sobre la base ya cargada. Cada uno usa su propio fixture dentro de una transacción que se revierte (`BEGIN … ROLLBACK`), así que **no dejan datos** y se pueden correr las veces que quieras.
+
+```bash
+# Pruebas negativas: verifica que cada comando rechaza operaciones inválidas.
+# Con ON_ERROR_STOP=1, si una validación NO se dispara el script falla (exit != 0).
+docker compose exec -T db psql -U postgres -d cqrs_tp -v ON_ERROR_STOP=1 -f /sql/15_pruebas_negativas.sql
+
+# Demo de consistencia eventual: síncrono (sin ventana) vs asíncrono (con ventana).
+docker compose exec -T db psql -U postgres -d cqrs_tp -f /sql/16_demo_consistencia_eventual.sql
+```
+
+`15` imprime un `OK …` por cada validación; `16` muestra los dos modelos lado a lado antes y después de procesar la cola (`16` requiere haber cargado `14_async_sync.sql`).
 
 ## Decisiones de diseño
 

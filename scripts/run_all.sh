@@ -55,11 +55,9 @@ echo "[7/9] Benchmark CQRS vs CRUD (warm-up + medición)..."
 # el costo de leer de disco la primera vez.
 run_sql sql/11_benchmark.sql > /dev/null 2>&1
 BENCH="$(run_sql sql/11_benchmark.sql 2>&1)"
-echo ""
-echo "=== Resumen CQRS vs CRUD (2da pasada, cache caliente) ==="
 # Cada sección del benchmark imprime 2 líneas "Time:" en orden (CQRS y luego CRUD).
-# Parseamos esos pares y mostramos el ratio aproximado para que la comparación sea explícita.
-echo "$BENCH" | awk '
+# Parseamos esos pares en una tabla de ratios; se guarda para reusar en el RESUMEN FINAL.
+BENCH_SUMMARY="$(echo "$BENCH" | awk '
   /^====/ {
     title = $0; gsub(/=/, "", title); gsub(/^[ \t]+|[ \t]+$/, "", title); n = 0; next
   }
@@ -78,19 +76,47 @@ echo "$BENCH" | awk '
       printf "  %-34s CQRS %8.3f ms | CRUD %8.3f ms  ->  %s\n", title, cqrs, crud, nota
     }
   }
-'
+')"
+echo ""
+echo "=== Resumen CQRS vs CRUD (2da pasada, cache caliente) ==="
+echo "$BENCH_SUMMARY"
 
 echo ""
 echo "[8/9] Pruebas negativas (validaciones de negocio)..."
-# Gate: con ON_ERROR_STOP, si alguna validación no se dispara el script aborta.
-run_sql sql/15_pruebas_negativas.sql
+# Gate: si alguna validación no se dispara, abortamos. Capturamos la salida para resumir.
+set +e
+NEG="$(run_sql sql/15_pruebas_negativas.sql 2>&1)"
+NEG_RC=$?
+set -e
+echo "$NEG"
+if [ "$NEG_RC" -ne 0 ]; then
+    echo "!! FALLO: alguna validación de negocio no se disparó. Abortando." >&2
+    exit 1
+fi
+NEG_OK=$(echo "$NEG" | grep -c 'rechazado:' || true)
 
 echo ""
 echo "[9/9] Demo de consistencia eventual (sincrono vs asincrono)..."
-run_sql sql/16_demo_consistencia_eventual.sql
+set +e
+DEMO="$(run_sql sql/16_demo_consistencia_eventual.sql 2>&1)"
+DEMO_RC=$?
+set -e
+echo "$DEMO"
+if [ "$DEMO_RC" -eq 0 ] && echo "$DEMO" | grep -q 'VENTANA DE INCONSISTENCIA' && echo "$DEMO" | grep -q 'COINCIDIR'; then
+    DEMO_STATUS="OK (ventana demostrada; consistencia recuperada al procesar la cola)"
+else
+    DEMO_STATUS="(ver salida arriba)"
+fi
 
 echo ""
-echo "=== Listo ==="
-echo "Planes completos (EXPLAIN) + detalle: correr"
-echo "  docker compose exec -T db psql -U postgres -d cqrs_tp -f /sql/11_benchmark.sql"
+echo "################### RESUMEN FINAL ###################"
+echo ""
+echo "Mediciones de lectura/escritura (CQRS vs CRUD, cache caliente):"
+echo "$BENCH_SUMMARY"
+echo ""
+printf "  %-34s %s\n" "Pruebas negativas (Parte 2):"      "${NEG_OK}/12 validaciones rechazadas OK"
+printf "  %-34s %s\n" "Consistencia eventual (Parte 4.2):" "${DEMO_STATUS}"
+echo ""
+echo "#####################################################"
+echo "Planes completos (EXPLAIN): docker compose exec -T db psql -U postgres -d cqrs_tp -f /sql/11_benchmark.sql"
 echo "App: http://localhost:8000"

@@ -47,4 +47,7 @@ LEFT JOIN escritura.Producto pr  ON pr.ID_Producto = i.ID_Producto
 GROUP BY p.ID_Pedido, c.Nombre, c.Email, p.Fecha_Creacion, p.Estado, p.Total, c.ID_Cliente
 ON CONFLICT (ID_Pedido) DO NOTHING;
 
+-- poblar el resumen de ventas usado por la consulta CQRS de top productos
+SELECT lectura.sync_ventas();
+
 ANALYZE;  -- actualizar estadísticas del planner antes de medir

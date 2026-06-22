@@ -18,4 +18,7 @@ SELECT escritura.actualizar_estado(1, 'Enviado');
 SELECT * FROM lectura.obtener_resumen_pedido(1);
 SELECT * FROM lectura.obtener_pedidos_por_cliente(1);
 SELECT lectura.obtener_estado_envio(1);
-SELECT * FROM lectura.obtener_top_productos(now() - interval '1 day', now() + interval '1 day');
+SELECT * FROM lectura.obtener_top_productos(
+    (now() - interval '1 day')::timestamp,
+    (now() + interval '1 day')::timestamp
+);

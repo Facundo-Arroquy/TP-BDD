@@ -28,7 +28,7 @@ En Windows PowerShell:
 .\scripts\run_all.ps1 -Mode docker
 ```
 
-`run_all.sh` hace todo en una sola corrida: levanta Postgres, carga el esquema y las funciones, corre el **smoke test (`08`)**, carga el dataset grande y mide el benchmark CQRS vs CRUD (con una pasada de *warm-up* de cache para que los tiempos sean estables), imprimiendo el resumen de tiempos al final.
+`run_all.sh` hace todo en una sola corrida (9 pasos): levanta Postgres, carga el esquema y las funciones, corre el **smoke test (`08`)**, carga el dataset grande, mide el benchmark CQRS vs CRUD (con una pasada de *warm-up* de cache para que los tiempos sean estables) imprimiendo el resumen de tiempos con ratios, y finalmente corre las **pruebas negativas (`15`)** —como gate de validación— y la **demo de consistencia eventual (`16`)**.
 
 > El smoke test inserta unos pocos datos de demo **legibles** (clientes Ana/Luis, productos Teclado/Mouse/Monitor y un pedido de ejemplo), pensados para **probar el flujo desde el frontend** —a diferencia de los `Cliente 1` / `Producto 1` que genera el seed. Son ~5 filas y **no afectan las mediciones**: las consultas del benchmark apuntan a otros IDs (cliente 42, pedido 25000).
 
@@ -86,7 +86,7 @@ Orden y propósito:
 
 ## Pruebas y demos
 
-Scripts independientes que corren sobre la base ya cargada. Cada uno usa su propio fixture dentro de una transacción que se revierte (`BEGIN … ROLLBACK`), así que **no dejan datos** y se pueden correr las veces que quieras.
+`run_all.sh` ya los corre al final (pasos `8` y `9`). Igual quedan como scripts independientes para correrlos por separado sobre la base ya cargada. Cada uno usa su propio fixture dentro de una transacción que se revierte (`BEGIN … ROLLBACK`), así que **no dejan datos** y se pueden correr las veces que quieras.
 
 ```bash
 # Pruebas negativas: verifica que cada comando rechaza operaciones inválidas.

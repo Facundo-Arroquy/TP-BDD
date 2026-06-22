@@ -113,15 +113,20 @@ docker compose exec -T db psql -U postgres -d cqrs_tp -f /sql/16_demo_consistenc
 | Archivo | Mejora |
 |---------|--------|
 | `sql/05_commands.sql` | Reposición de stock al cancelar pedidos Confirmado/Enviado |
+| `sql/06_indexes.sql` | Índice FK `idx_item_pedido` para una comparación CRUD justa |
 | `sql/07_queries.sql` | `obtener_top_productos` movido al modelo de lectura (`13_resumen_ventas.sql`) |
 | `sql/09_crud_reference.sql` | Índice `idx_pedido_cliente` para benchmark justo |
-| `sql/10_seed_benchmark.sql` | Semilla fija (`setseed(0.5)`) para datos reproducibles |
+| `sql/10_seed_benchmark.sql` | Semilla fija (`setseed(0.5)`) + `sync_ventas` para datos reproducibles |
+| `sql/11_benchmark.sql` | `EXPLAIN` + `\timing` de las 4 consultas (evita el overhead de instrumentación) |
 | `sql/12_estado_historico.sql` | Tabla + trigger de historial de cambios de estado |
 | `sql/13_resumen_ventas.sql` | Modelo de lectura desnormalizado para top productos |
 | `sql/14_async_sync.sql` | Cola de eventos + LISTEN/NOTIFY para sincronización asíncrona |
+| `sql/15_pruebas_negativas.sql` | Pruebas de las validaciones de negocio (gate) |
+| `sql/16_demo_consistencia_eventual.sql` | Demo ejecutable síncrono vs asíncrono |
+| `scripts/run_all.sh` | Carga + benchmark con ratios + pruebas + RESUMEN FINAL en una corrida |
 | `docs/diagrama_arquitectura.md` | Diagrama Mermaid de la arquitectura CQRS |
 | `docker-compose.yml` | Entorno reproducible con Postgres 16 + app |
 | `app/Dockerfile` | Imagen Docker para la app FastAPI |
 | `app/main.py` | Endpoints nuevos: historial, auditoría, dashboard métricas |
 | `app/static/index.html` | Dashboard, auditoría, historial de estados, diagrama de arq. |
-| `resolucion.md` | Tabla benchmark completa con todas las consultas |
+| `resolucion.md` | Parte 4 con mediciones reales + referencias a pruebas (`15`) y demo (`16`) |

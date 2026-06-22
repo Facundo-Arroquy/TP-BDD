@@ -263,7 +263,9 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
-> **Nota sobre la variante asíncrona (opcional):** en vez de llamar a `sync_resumen` dentro del comando, se podría insertar un evento en una tabla `cola_eventos` y procesarlo con un `TRIGGER` diferido o un job externo (`LISTEN/NOTIFY`). Eso da menor latencia de escritura a costa de consistencia eventual. Para el TP alcanza con la síncrona implementada arriba.
+> **Nota sobre la variante asíncrona:** en vez de llamar a `sync_resumen` dentro del comando, se puede insertar un evento en una cola y procesarlo con un job externo (`LISTEN/NOTIFY`). Eso da menor latencia de escritura a costa de consistencia eventual. La maquinaria está implementada en `sql/14_async_sync.sql` y se demuestra en la sección 13.
+
+**Pruebas de las validaciones.** El camino feliz está en `sql/08_smoke_test.sql`. Para demostrar que los comandos **rechazan** las operaciones inválidas (lo que pide la Parte 2), `sql/15_pruebas_negativas.sql` ejecuta cada caso inválido y verifica que se dispare el error: cliente/producto/pedido inexistente, pedido no Pendiente, stock insuficiente (al agregar y al confirmar), pedido sin ítems, cantidad ≤ 0 y transición de estado inválida. Si alguna validación no salta, el script falla (sirve como gate).
 
 ---
 
@@ -516,6 +518,8 @@ La escritura CQRS es ~**7× más lenta** porque mantiene el modelo de lectura al
 En la variante **síncrona** que implementamos, no hay ventana de inconsistencia: el resumen se actualiza en la misma transacción que el comando, así que cualquier lectura posterior ve el dato correcto.
 
 Si se usara la variante **asíncrona** (sincronización por trigger diferido o job), existiría una ventana entre la escritura y la propagación: un usuario podría confirmar un pedido y, por unos milisegundos/segundos, seguir viendo el estado anterior en la vista de lectura. Para gestión de pedidos suele ser aceptable (el cliente tolera ver "Pendiente" un instante más), pero no lo sería para datos donde la lectura inmediata es crítica (ej. saldo disponible antes de un pago).
+
+Esta ventana se puede **ver ejecutándola**: `sql/16_demo_consistencia_eventual.sql` (sobre la cola de `14_async_sync.sql`) hace un cambio en el modelo de escritura, lo **encola** en vez de sincronizar, y muestra los dos modelos lado a lado: la lectura queda atrasada (`escritura=Entregado` / `lectura=Enviado`) hasta que `procesar_cola_sync()` propaga el cambio y vuelven a coincidir. El camino síncrono, en cambio, coincide al instante.
 
 ### 14. Cuándo CQRS agrega complejidad innecesaria
 

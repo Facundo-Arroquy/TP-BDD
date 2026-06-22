@@ -6,7 +6,7 @@ La Parte 4 (benchmarks CQRS vs CRUD y conclusiones) queda pendiente porque requi
 
 > Cómo correr todo: ejecutar los bloques en orden (1 → 8). Cada bloque también está pensado para vivir en su propio archivo dentro de `sql/` (ver `task.md`).
 >
-> **Mejoras posteriores:** este TP fue extendido con reposición de stock al cancelar, historial de estados vía trigger, modelo de lectura para top productos (`ResumenVentas`), sincronización asíncrona con cola de eventos, dashboard de métricas, vista de auditoría y diagrama de arquitectura. Ver `revision.md` y `README.md`.
+> **Mejoras posteriores:** este TP fue extendido con reposición de stock al cancelar, historial de estados vía trigger, modelo de lectura para top productos (`ResumenVentas`), sincronización asíncrona con cola de eventos, dashboard de métricas, vista de auditoría y diagrama de arquitectura. Ver `README.md`.
 
 ---
 
@@ -339,7 +339,10 @@ SELECT escritura.actualizar_estado(1, 'Enviado');
 SELECT * FROM lectura.obtener_resumen_pedido(1);
 SELECT * FROM lectura.obtener_pedidos_por_cliente(1);
 SELECT lectura.obtener_estado_envio(1);
-SELECT * FROM lectura.obtener_top_productos(now() - interval '1 day', now() + interval '1 day');
+SELECT * FROM lectura.obtener_top_productos(
+    (now() - interval '1 day')::timestamp,
+    (now() + interval '1 day')::timestamp
+);
 ```
 
 ---
@@ -421,52 +424,92 @@ LEFT JOIN escritura.Producto pr  ON pr.ID_Producto = i.ID_Producto
 GROUP BY p.ID_Pedido, c.Nombre, c.Email, p.Fecha_Creacion, p.Estado, p.Total, c.ID_Cliente
 ON CONFLICT (ID_Pedido) DO NOTHING;
 
+-- poblar el resumen de ventas usado por la consulta CQRS de top productos
+SELECT lectura.sync_ventas();
+
 ANALYZE;  -- actualizar estadísticas del planner antes de medir
 ```
 
 ### 11. Benchmark de lectura (CQRS vs CRUD)
 
+Medimos el `SELECT` directo (el cuerpo de cada función) y no la función envoltorio: las
+funciones son `LANGUAGE sql` **VOLATILE**, no se *inlinean* y el `EXPLAIN` las muestra como
+un `Function Scan` opaco que esconde el plan real (no se vería el índice). El set completo de
+las 4 consultas está en `sql/11_benchmark.sql`; acá el ejemplo de *pedidos por cliente*:
+
 ```sql
--- CQRS: lectura desnormalizada, sin JOINs
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lectura.obtener_pedidos_por_cliente(42);
+-- CQRS: lectura desnormalizada, sin JOINs (cuerpo de obtener_pedidos_por_cliente)
+EXPLAIN SELECT * FROM lectura.PedidoResumen
+WHERE ID_Cliente = 42 ORDER BY Fecha_Creacion DESC;
 
 -- CRUD: misma respuesta con JOINs + GROUP BY en tiempo de lectura
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM escritura.crud_pedidos_por_cliente(42);
+EXPLAIN SELECT p.ID_Pedido, c.Nombre, p.Estado, p.Total,
+       COUNT(i.ID_Item), STRING_AGG(pr.Nombre || ' x' || i.Cantidad, ', ')
+FROM escritura.Pedido p
+JOIN escritura.Cliente c         ON c.ID_Cliente = p.ID_Cliente
+LEFT JOIN escritura.ItemPedido i ON i.ID_Pedido = p.ID_Pedido
+LEFT JOIN escritura.Producto pr  ON pr.ID_Producto = i.ID_Producto
+WHERE p.ID_Cliente = 42
+GROUP BY p.ID_Pedido, c.Nombre, p.Estado, p.Total
+ORDER BY p.ID_Pedido DESC;
 ```
 
 Qué observar en cada plan:
 
 - **CQRS** usa `idx_resumen_cliente` → *Index Scan* sobre `PedidoResumen` y devuelve filas ya armadas. Sin nodos de *Hash Join* ni *Aggregate*.
-- **CRUD** necesita un *Index Scan* sobre `Pedido` + dos *Joins* (`Cliente`, `ItemPedido`, `Producto`) + un *GroupAggregate*. Más nodos, más buffers leídos, mayor `actual time`.
+- **CRUD** necesita un *Index Scan* sobre `Pedido` + dos *Joins* (`Cliente`, `ItemPedido`, `Producto`) + un *GroupAggregate*. Más nodos y más trabajo por lectura; el tiempo real se toma con `\timing`.
 
-Tabla para completar con tus mediciones (columna *Execution Time* del `EXPLAIN ANALYZE`):
+El tiempo sale de `\timing` y los nodos del `EXPLAIN` sin `ANALYZE`. Mediciones tomadas en
+PostgreSQL 16 (Docker), dataset de 50.000 pedidos / 150.000 ítems, 2da corrida con cache
+caliente. Los valores absolutos dependen del hardware; lo importante es la **relación
+CQRS/CRUD**, que se mantiene entre corridas.
 
-| Consulta | Enfoque | Execution time (ms) | Buffers (hit/read) | Nodos del plan |
-|---|---|---|---|---|---|
-| Pedidos por cliente | CQRS  | _completar_ | _completar_ | Index Scan (idx_resumen_cliente) |
-| Pedidos por cliente | CRUD  | _completar_ | _completar_ | Index Scan (Pedido) + 2 Hash Join + GroupAggregate |
-| Resumen de un pedido | CQRS  | _completar_ | _completar_ | Index Scan (PK PedidoResumen) |
-| Resumen de un pedido | CRUD  | _completar_ | _completar_ | Index Scan (PK Pedido) + 2 Hash Join + GroupAggregate |
-| Estado de envío | CQRS  | _completar_ | _completar_ | Index Scan (PK PedidoResumen) |
-| Estado de envío | CRUD  | _completar_ | _completar_ | Index Scan (PK Pedido) + 2 Hash Join + GroupAggregate |
-| Top productos | CQRS  | _completar_ | _completar_ | Index Scan (idx_item_producto) + Hash Join + GroupAggregate |
-| Top productos | CRUD  | _completar_ | _completar_ | Index Scan (idx_item_producto) + Hash Join + GroupAggregate |
+| Consulta | Enfoque | Tiempo wall-clock (ms) | Nodos del plan |
+|---|---|---|---|
+| Pedidos por cliente | CQRS  | **2,01** | Bitmap Index Scan (idx_resumen_cliente) + Sort |
+| Pedidos por cliente | CRUD  | **5,29** | Index Scan (Pedido) + joins + GroupAggregate |
+| Resumen de un pedido | CQRS  | **0,48** | Index Scan (PK PedidoResumen) |
+| Resumen de un pedido | CRUD  | **1,29** | Index Scan (PK Pedido) + joins + GroupAggregate |
+| Estado de envío | CQRS  | **0,53** | Index Scan (PK PedidoResumen) |
+| Estado de envío | CRUD  | **0,64** | Index Scan (PK Pedido) |
+| Top productos | CQRS  | **0,44** | Limit + Index Scan (idx_ventas_unidades) sobre ResumenVentas |
+| Top productos | CRUD  | **54,24** | Hash Joins + HashAggregate + Sort sobre 150k ítems |
 
-> Resultado esperado: la lectura CQRS es **varias veces más rápida** y estable porque traslada el trabajo de unir/agregar al momento de la escritura (una vez) en lugar de repetirlo en cada lectura (muchas veces).
+**Lectura de los resultados:**
+
+- En las consultas con **agregación pesada** la diferencia es enorme: *Top productos* es ~**123×** más rápida en CQRS (0,44 vs 54,24 ms), porque el CRUD debe recorrer y agrupar los 150.000 ítems en cada lectura, mientras que CQRS lee una tabla ya agregada (`ResumenVentas`).
+- En consultas con **JOINs moderados** (*pedidos por cliente*, *resumen de pedido*) la ventaja es real pero más modesta: ~**2,6×**. Se evita el `GroupAggregate` y los joins, pero el CRUD bien indexado tampoco es lento.
+- En la **proyección mínima** (*estado de envío*) prácticamente **empatan** (0,53 vs 0,64 ms): el estado vive directo en `Pedido`, sin joins ni agregación, así que ahí CQRS **no aporta** nada. Es un buen recordatorio de que CQRS rinde donde hay trabajo que pre-calcular, no en todo.
 
 ### 12. Costo de escritura
 
 El otro lado del trade-off: cada comando CQRS hace trabajo extra (sincronizar `PedidoResumen`). Para medirlo:
 
 ```sql
-\timing on
+-- Se mide dentro de transacciones que se revierten para no cambiar el dataset.
 -- escritura CQRS: el comando crea el pedido Y sincroniza el resumen
+BEGIN;
+\timing on
 SELECT escritura.create_pedido(42);
+\timing off
+ROLLBACK;
+
 -- escritura CRUD pura: solo el INSERT normalizado, sin sincronización
+BEGIN;
+\timing on
 INSERT INTO escritura.Pedido (ID_Cliente) VALUES (42);
+\timing off
+ROLLBACK;
 ```
 
-La escritura CQRS es algo **más lenta** porque mantiene el modelo de lectura al día. Es el precio de tener lecturas baratas.
+Mediciones (mismo entorno que la tabla anterior):
+
+| Escritura | Tiempo (ms) | Qué hace |
+|---|---|---|
+| CQRS (`create_pedido`) | **5,02** | INSERT del pedido + `sync_resumen` (reconstruye la fila de `PedidoResumen`) + auditoría |
+| CRUD (`INSERT` puro) | **0,70** | solo el INSERT normalizado |
+
+La escritura CQRS es ~**7× más lenta** porque mantiene el modelo de lectura al día en la misma transacción. Es el precio de tener lecturas baratas: se traslada el trabajo de las muchas lecturas a las pocas escrituras. El número absoluto es chico (5 ms) y, dado que en este dominio las escrituras son esporádicas, el trade-off conviene.
 
 ### 13. Consistencia eventual
 

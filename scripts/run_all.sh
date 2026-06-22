@@ -23,16 +23,16 @@ run_sql() {
 echo "=== TP CQRS — Setup completo ==="
 
 if [ "$MODE" = "docker" ]; then
-    echo "[1/7] Levantando contenedores..."
+    echo "[1/9] Levantando contenedores..."
     docker compose up -d
-    echo "[2/7] Esperando a que Postgres esté listo..."
+    echo "[2/9] Esperando a que Postgres esté listo..."
     until docker compose exec -T db pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
     echo "      Postgres listo."
 else
-    echo "[1/7] Usando Postgres local..."
+    echo "[1/9] Usando Postgres local..."
 fi
 
-echo "[3/7] Ejecutando scripts 00 a 14..."
+echo "[3/9] Ejecutando scripts 00 a 14..."
 for f in sql/00_setup.sql sql/01_write_model.sql sql/02_read_model.sql \
           sql/03_audit.sql sql/04_sync.sql sql/05_commands.sql \
           sql/06_indexes.sql sql/07_queries.sql sql/09_crud_reference.sql \
@@ -40,16 +40,16 @@ for f in sql/00_setup.sql sql/01_write_model.sql sql/02_read_model.sql \
     run_sql "$f"
 done
 
-echo "[4/7] Smoke test (flujo básico)..."
+echo "[4/9] Smoke test (flujo básico)..."
 run_sql sql/08_smoke_test.sql
 
-echo "[5/7] Sync asíncrona (opcional)..."
+echo "[5/9] Sync asíncrona (opcional)..."
 run_sql sql/14_async_sync.sql
 
-echo "[6/7] Cargando dataset de benchmark..."
+echo "[6/9] Cargando dataset de benchmark..."
 run_sql sql/10_seed_benchmark.sql
 
-echo "[7/7] Benchmark CQRS vs CRUD (warm-up + medición)..."
+echo "[7/9] Benchmark CQRS vs CRUD (warm-up + medición)..."
 # El benchmark se corre dos veces en la misma corrida: la 1ra pasada calienta
 # el cache (se descarta) y la 2da es la que medimos. Así los tiempos no incluyen
 # el costo de leer de disco la primera vez.
@@ -79,6 +79,15 @@ echo "$BENCH" | awk '
     }
   }
 '
+
+echo ""
+echo "[8/9] Pruebas negativas (validaciones de negocio)..."
+# Gate: con ON_ERROR_STOP, si alguna validación no se dispara el script aborta.
+run_sql sql/15_pruebas_negativas.sql
+
+echo ""
+echo "[9/9] Demo de consistencia eventual (sincrono vs asincrono)..."
+run_sql sql/16_demo_consistencia_eventual.sql
 
 echo ""
 echo "=== Listo ==="
